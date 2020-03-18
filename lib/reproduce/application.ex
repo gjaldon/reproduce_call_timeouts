@@ -8,6 +8,7 @@ defmodule Reproduce.Application do
   def start(_type, _args) do
     children = [
       # Starts a worker by calling: Reproduce.Worker.start_link(arg)
+      {Reproduce.Worker, []},
       {Redis, []}
     ]
 
@@ -17,11 +18,13 @@ defmodule Reproduce.Application do
     Supervisor.start_link(children, opts)
   end
 
-  def test() do
-    Enum.each(1..100, fn i -> Task.async(fn ->
-        info = Redis.command!(["INFO"])
-        IO.inspect(i)
-      end)
-    end)
+  def test do
+    Enum.map(1..20_000, fn i -> Task.async(fn -> Reproduce.Worker.test() end) end)
+  end
+
+  def message_queue_len do
+    Reproduce.Worker
+    |> GenServer.whereis()
+    |> Process.info(:message_queue_len)
   end
 end

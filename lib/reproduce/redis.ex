@@ -1,40 +1,50 @@
 defmodule Redis do
   use Supervisor
 
-  @name __MODULE__
   @poolboy_wait_time :timer.seconds(5)
-  @pool_name :rate_limit_redis_pool
+  @pool_names [
+    :rate_limit_pool,
+    :rate_limit_pool_1,
+    :rate_limit_pool_2,
+    :rate_limit_pool_3,
+    :rate_limit_pool_4
+  ]
 
-  def start_link(state \\ []), do: Supervisor.start_link(@name, state)
+  def start_link([]), do: Supervisor.start_link(__MODULE__, [])
 
-  def init(_state) do
-    pool_opts = [
-      name: {:local, @pool_name},
-      worker_module: Redix,
-      size: 10,
-      max_overflow: 32
-    ]
+  def init([]) do
+    children =
+      Enum.map(@pool_names, fn pool_name ->
+        pool_opts = [
+          name: {:local, pool_name},
+          worker_module: Redix,
+          size: 20,
+          max_overflow: 20
+        ]
 
-    children = [
-      :poolboy.child_spec(@pool_name, pool_opts, [])
-    ]
+        :poolboy.child_spec(pool_name, pool_opts, [])
+      end)
 
-    supervise(children, strategy: :one_for_one, name: @name)
+    supervise(children, strategy: :one_for_one, name: __MODULE__)
+  end
+
+  def pool() do
+    Enum.random(@pool_names)
   end
 
   def command(command, opts \\ []) do
-    :poolboy.transaction(@pool_name, &Redix.command(&1, command, opts), @poolboy_wait_time)
+    :poolboy.transaction(pool(), &Redix.command(&1, command, opts), @poolboy_wait_time)
   end
 
   def command!(command, opts \\ []) do
-    :poolboy.transaction(@pool_name, &Redix.command!(&1, command, opts), @poolboy_wait_time)
+    :poolboy.transaction(pool(), &Redix.command!(&1, command, opts), @poolboy_wait_time)
   end
 
   def pipeline(commands, opts \\ []) do
-    :poolboy.transaction(@pool_name, &Redix.pipeline(&1, commands, opts), @poolboy_wait_time)
+    :poolboy.transaction(pool(), &Redix.pipeline(&1, commands, opts), @poolboy_wait_time)
   end
 
   def pipeline!(commands, opts \\ []) do
-    :poolboy.transaction(@pool_name, &Redix.pipeline!(&1, commands, opts), @poolboy_wait_time)
+    :poolboy.transaction(pool(), &Redix.pipeline!(&1, commands, opts), @poolboy_wait_time)
   end
 end
